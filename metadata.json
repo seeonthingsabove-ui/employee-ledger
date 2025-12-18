@@ -1,0 +1,4 @@
+{
+  "name": "SwiftLeaveManager",
+  "description": "A zero-cost, AI-powered leave approval system demo. It simulates the full workflow: Employees draft requests with Gemini AI, Managers approve/deny via a dashboard, and all data is tracked in a simulated Google Sheet view. (Uses LocalStorage for data persistence in this demo)."
+}
