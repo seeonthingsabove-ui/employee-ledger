@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import LeaveForm from "./components/LeaveForm";
+import LeaveHistory from "./components/LeaveHistory";
 import ManagerDashboard from "./components/ManagerDashboard";
-import GoogleSheetView from "./components/GoogleSheetView";
 import GoogleLogin from "./components/GoogleLogin";
 import { seedData } from "./services/storageService";
 import { fetchEmployeeDirectory, fetchUserRole } from "./services/sheetService";
@@ -10,7 +10,12 @@ import { AuthenticatedUser, EmployeeRecord, UserProfile } from "./types";
 enum View {
   EMPLOYEE = "EMPLOYEE",
   MANAGER = "MANAGER",
-  SHEET = "SHEET",
+}
+
+enum EmployeeScreen {
+  ACTIONS = "ACTIONS",
+  APPLY = "APPLY",
+  HISTORY = "HISTORY",
 }
 
 const App: React.FC = () => {
@@ -20,9 +25,12 @@ const App: React.FC = () => {
   const [roleMessage, setRoleMessage] = useState("");
   const [isCheckingRole, setIsCheckingRole] = useState(false);
   const [authedUser, setAuthedUser] = useState<AuthenticatedUser | null>(null);
-  const [showLeaveForm, setShowLeaveForm] = useState(false);
+  const [employeeScreen, setEmployeeScreen] = useState<EmployeeScreen>(
+    EmployeeScreen.ACTIONS
+  );
   const [selfRecord, setSelfRecord] = useState<EmployeeRecord | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [deepLinkRid, setDeepLinkRid] = useState<string | null>(null);
 
   const isManager =
     userProfile?.role === "manager" || userProfile?.role === "admin";
@@ -48,6 +56,13 @@ const App: React.FC = () => {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Capture deep-link params from manager email (e.g. ?view=manager&rid=REQ-XXXX)
+    const params = new URLSearchParams(window.location.search);
+    const rid = params.get("rid");
+    if (rid) setDeepLinkRid(rid);
   }, []);
 
   const handleLookup = async (emailOverride?: string) => {
@@ -82,6 +97,20 @@ const App: React.FC = () => {
     setIsCheckingRole(false);
   };
 
+  useEffect(() => {
+    // If manager clicks the email link, route them to Manage Leave after role is known.
+    if (!deepLinkRid) return;
+    if (!userProfile) return;
+    if (userProfile.role !== "manager" && userProfile.role !== "admin") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const view = (params.get("view") || "").toLowerCase();
+    if (view === "manager") {
+      setEmployeeScreen(EmployeeScreen.ACTIONS);
+      setCurrentView(View.MANAGER);
+    }
+  }, [deepLinkRid, userProfile]);
+
   const handleGoogleLogin = (user: AuthenticatedUser) => {
     setAuthedUser(user);
     setUserEmail(user.email);
@@ -95,7 +124,7 @@ const App: React.FC = () => {
     setUserEmail("");
     setRoleMessage("");
     setCurrentView(View.EMPLOYEE);
-    setShowLeaveForm(false);
+    setEmployeeScreen(EmployeeScreen.ACTIONS);
     localStorage.removeItem("swiftleave_last_email");
     localStorage.removeItem("swiftleave_auth_user");
   };
@@ -166,13 +195,19 @@ const App: React.FC = () => {
           <div>
             <h2 className="text-3xl font-bold text-gray-800">
               {currentView === View.EMPLOYEE &&
-                (showLeaveForm ? "New Leave Request" : "Apply Leave")}
+                (employeeScreen === EmployeeScreen.APPLY
+                  ? "New Leave Request"
+                  : employeeScreen === EmployeeScreen.HISTORY
+                  ? "Leave History"
+                  : "Apply Leave")}
               {currentView === View.MANAGER && "Manage Leave"}
             </h2>
             <p className="text-gray-500 mt-1">
               {currentView === View.EMPLOYEE &&
-                (showLeaveForm
+                (employeeScreen === EmployeeScreen.APPLY
                   ? "Fill in the form to submit your leave request."
+                  : employeeScreen === EmployeeScreen.HISTORY
+                  ? "Review your submitted requests from the Logs sheet."
                   : "Choose an action to get started.")}
               {currentView === View.MANAGER &&
                 "Approve or reject requests and track the live sheet."}
@@ -181,77 +216,110 @@ const App: React.FC = () => {
         </header>
 
         {/* Action cards based on role (home screen) */}
-        {!showLeaveForm && (
-          <section className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
-            <button
-              type="button"
-              onClick={() => {
-                if (!selfRecord) {
-                  setToast(
-                    "No user details available in the employee sheet for your login. Please contact the administrator."
-                  );
-                  return;
-                }
-                setCurrentView(View.EMPLOYEE);
-                setShowLeaveForm(true);
-              }}
-              className="text-left rounded-xl border p-5 shadow-sm transition hover:shadow-md border-emerald-500 bg-emerald-50 hover:border-emerald-600"
-            >
-              <h3 className="text-lg font-semibold text-slate-900 mb-1">
-                Apply Leave
-              </h3>
-              <p className="text-sm text-slate-600">
-                {isManager
-                  ? "Create a new leave request for yourself."
-                  : "Submit a new leave request to your manager."}
-              </p>
-            </button>
-
-            {isManager && (
+        {currentView === View.EMPLOYEE &&
+          employeeScreen === EmployeeScreen.ACTIONS && (
+            <section className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
               <button
                 type="button"
                 onClick={() => {
-                  setShowLeaveForm(false);
-                  setCurrentView(View.MANAGER);
+                  if (!selfRecord) {
+                    setToast(
+                      "No user details available in the employee sheet for your login. Please contact the administrator."
+                    );
+                    return;
+                  }
+                  setCurrentView(View.EMPLOYEE);
+                  setEmployeeScreen(EmployeeScreen.APPLY);
+                }}
+                className="text-left rounded-xl border p-5 shadow-sm transition hover:shadow-md border-emerald-500 bg-emerald-50 hover:border-emerald-600"
+              >
+                <h3 className="text-lg font-semibold text-slate-900 mb-1">
+                  Apply Leave
+                </h3>
+                <p className="text-sm text-slate-600">
+                  {isManager
+                    ? "Create a new leave request for yourself."
+                    : "Submit a new leave request to your manager."}
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!authedUser?.email) return;
+                  setCurrentView(View.EMPLOYEE);
+                  setEmployeeScreen(EmployeeScreen.HISTORY);
                 }}
                 className="text-left rounded-xl border p-5 shadow-sm transition hover:shadow-md border-slate-200 bg-white hover:border-slate-700"
               >
-                <h3 className="text-lg font-semibold mb-1">Manage Leave</h3>
+                <h3 className="text-lg font-semibold mb-1">Leave History</h3>
                 <p className="text-sm text-slate-600">
-                  Review and approve/reject pending leave requests as a manager.
+                  View your request history from the Logs sheet.
                 </p>
               </button>
-            )}
-          </section>
-        )}
+
+              {isManager && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmployeeScreen(EmployeeScreen.ACTIONS);
+                    setCurrentView(View.MANAGER);
+                  }}
+                  className="text-left rounded-xl border p-5 shadow-sm transition hover:shadow-md border-slate-200 bg-white hover:border-slate-700"
+                >
+                  <h3 className="text-lg font-semibold mb-1">Manage Leave</h3>
+                  <p className="text-sm text-slate-600">
+                    Review and approve/reject pending leave requests as a
+                    manager.
+                  </p>
+                </button>
+              )}
+            </section>
+          )}
 
         <div className="h-full pb-20">
-          {currentView === View.EMPLOYEE && showLeaveForm && selfRecord && (
-            <div className="max-w-3xl">
-              <button
-                type="button"
-                onClick={() => setShowLeaveForm(false)}
-                className="mb-4 inline-flex items-center text-sm text-slate-600 hover:text-slate-900"
-              >
-                <span className="mr-1">←</span> Back to actions
-              </button>
-              <LeaveForm
-                onSuccess={() => setShowLeaveForm(false)}
-                initialEmployee={{
-                  name: selfRecord.name,
-                  email: selfRecord.email,
-                  employeeId: selfRecord.employeeId,
-                }}
-              />
-            </div>
-          )}
+          {currentView === View.EMPLOYEE &&
+            employeeScreen !== EmployeeScreen.ACTIONS && (
+              <div className="min-w-3xl">
+                <button
+                  type="button"
+                  onClick={() => setEmployeeScreen(EmployeeScreen.ACTIONS)}
+                  className="mb-4 inline-flex items-center text-sm text-slate-600 hover:text-slate-900"
+                >
+                  <span className="mr-1">←</span> Back to actions
+                </button>
+
+                {employeeScreen === EmployeeScreen.APPLY && selfRecord && (
+                  <LeaveForm
+                    onSuccess={() => setEmployeeScreen(EmployeeScreen.ACTIONS)}
+                    initialEmployee={{
+                      name: selfRecord.name,
+                      email: selfRecord.email,
+                      employeeId: selfRecord.employeeId,
+                    }}
+                  />
+                )}
+
+                {employeeScreen === EmployeeScreen.HISTORY &&
+                  authedUser?.email && (
+                    <LeaveHistory employeeEmail={authedUser.email} />
+                  )}
+              </div>
+            )}
           {currentView === View.MANAGER &&
             (isManager ? (
               <div className="space-y-6">
-                <ManagerDashboard />
-                <div className="h-[520px]">
-                  <GoogleSheetView />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentView(View.EMPLOYEE);
+                    setEmployeeScreen(EmployeeScreen.ACTIONS);
+                  }}
+                  className="inline-flex items-center text-sm text-slate-600 hover:text-slate-900"
+                >
+                  <span className="mr-1">←</span> Back to actions
+                </button>
+                <ManagerDashboard focusRequestId={deepLinkRid || undefined} />
               </div>
             ) : (
               <div className="max-w-xl mx-auto bg-yellow-50 border border-yellow-200 text-yellow-800 p-6 rounded-lg shadow-sm">
@@ -263,7 +331,10 @@ const App: React.FC = () => {
                   the Sheet to view approvals.
                 </p>
                 <button
-                  onClick={() => setCurrentView(View.EMPLOYEE)}
+                  onClick={() => {
+                    setCurrentView(View.EMPLOYEE);
+                    setEmployeeScreen(EmployeeScreen.ACTIONS);
+                  }}
                   className="text-sm text-slate-900 underline"
                 >
                   Go back to Apply Leave

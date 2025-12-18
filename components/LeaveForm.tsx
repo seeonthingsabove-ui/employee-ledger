@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { LeaveRequest, LeaveStatus } from '../types';
 import { saveRequest } from '../services/storageService';
-import { appendLogEntry } from '../services/sheetService';
+import { appendLogEntry, fetchLookupOptions } from '../services/sheetService';
+
+const PERMISSION_ONLY_LEAVE_TYPES = ['FN Permission', 'AN Permission', 'In Between Permission'];
+const normalize = (v: string) => v.trim().toLowerCase();
 
 const LeaveForm: React.FC<{
   onSuccess: () => void;
@@ -11,13 +14,24 @@ const LeaveForm: React.FC<{
     name: '',
     email: '',
     empId: '',
+    permissionType: '',
+    leaveType: '',
+    requestedInTime: '',
+    requestedOutTime: '',
     startDate: '',
     endDate: '',
     reason: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [permissionTypeOptions, setPermissionTypeOptions] = useState<string[]>([]);
+  const [leaveTypeOptions, setLeaveTypeOptions] = useState<string[]>([]);
+  const [lookupError, setLookupError] = useState<string | null>(null);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
@@ -32,6 +46,55 @@ const LeaveForm: React.FC<{
     }
   }, [initialEmployee]);
 
+  useEffect(() => {
+    const loadLookups = async () => {
+      try {
+        const { permissionTypes, leaveTypes } = await fetchLookupOptions();
+        setPermissionTypeOptions(permissionTypes);
+        setLeaveTypeOptions(leaveTypes);
+        setLookupError(null);
+      } catch (e) {
+        console.error(e);
+        setLookupError('Failed to load dropdown options from LookUp sheet.');
+      }
+    };
+    loadLookups();
+  }, []);
+
+  const isPermission = normalize(formData.permissionType) === 'permission';
+
+  const filteredLeaveTypeOptions = (() => {
+    const normalizedPermissionOnly = new Set(PERMISSION_ONLY_LEAVE_TYPES.map((t) => normalize(t)));
+
+    if (isPermission) {
+      const fromSheet = leaveTypeOptions.filter((t) => normalizedPermissionOnly.has(normalize(t)));
+      return fromSheet.length ? fromSheet : PERMISSION_ONLY_LEAVE_TYPES;
+    }
+
+    return leaveTypeOptions.filter((t) => !normalizedPermissionOnly.has(normalize(t)));
+  })();
+
+  useEffect(() => {
+    // When switching away from "permission", clear requested times and disallow permission-only leave types.
+    const normalizedPermissionOnly = new Set(PERMISSION_ONLY_LEAVE_TYPES.map((t) => normalize(t)));
+    setFormData((prev) => {
+      const next = { ...prev };
+      if (normalize(prev.permissionType) !== 'permission') {
+        next.requestedInTime = '';
+        next.requestedOutTime = '';
+        if (normalizedPermissionOnly.has(normalize(prev.leaveType))) {
+          next.leaveType = '';
+        }
+      } else {
+        if (prev.leaveType && !normalizedPermissionOnly.has(normalize(prev.leaveType))) {
+          next.leaveType = '';
+        }
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.permissionType]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -41,6 +104,10 @@ const LeaveForm: React.FC<{
       employeeName: formData.name,
       employeeEmail: formData.email,
       employeeId: formData.empId,
+      permissionType: formData.permissionType,
+      leaveType: formData.leaveType,
+      requestedInTime: isPermission ? formData.requestedInTime : '',
+      requestedOutTime: isPermission ? formData.requestedOutTime : '',
       startDate: formData.startDate,
       endDate: formData.endDate,
       reason: formData.reason,
@@ -58,13 +125,28 @@ const LeaveForm: React.FC<{
         employeeName: newRequest.employeeName,
         employeeEmail: newRequest.employeeEmail,
         employeeId: newRequest.employeeId,
+        permissionType: newRequest.permissionType,
+        leaveType: newRequest.leaveType,
+        requestedInTime: newRequest.requestedInTime,
+        requestedOutTime: newRequest.requestedOutTime,
         startDate: newRequest.startDate,
         endDate: newRequest.endDate,
         reason: newRequest.reason,
         timestamp: newRequest.timestamp,
       });
       setIsSubmitting(false);
-      setFormData({ name: '', email: '', empId: '', startDate: '', endDate: '', reason: '' });
+      setFormData({
+        name: '',
+        email: '',
+        empId: '',
+        permissionType: '',
+        leaveType: '',
+        requestedInTime: '',
+        requestedOutTime: '',
+        startDate: '',
+        endDate: '',
+        reason: '',
+      });
       alert("Request Submitted!");
       onSuccess();
     }, 1000);
@@ -73,6 +155,11 @@ const LeaveForm: React.FC<{
   return (
     <div className="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-lg border border-gray-100">
       <h2 className="text-2xl font-bold text-gray-800 mb-6">New Leave Request</h2>
+      {lookupError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {lookupError}
+        </div>
+      )}
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
@@ -104,6 +191,75 @@ const LeaveForm: React.FC<{
             />
           </div>
         </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Permission Type</label>
+            <select
+              name="permissionType"
+              required
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition bg-white"
+              value={formData.permissionType}
+              onChange={handleSelectChange}
+            >
+              <option value="" disabled>
+                Select Permission Type
+              </option>
+              {permissionTypeOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Leave Type</label>
+            <select
+              name="leaveType"
+              required
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition bg-white"
+              value={formData.leaveType}
+              onChange={handleSelectChange}
+            >
+              <option value="" disabled>
+                Select Leave Type
+              </option>
+              {filteredLeaveTypeOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {isPermission && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Requested InTime</label>
+              <input
+                type="time"
+                name="requestedInTime"
+                required
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
+                value={formData.requestedInTime}
+                onChange={handleInputChange}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Requested OutTime</label>
+              <input
+                type="time"
+                name="requestedOutTime"
+                required
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
+                value={formData.requestedOutTime}
+                onChange={handleInputChange}
+              />
+            </div>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>

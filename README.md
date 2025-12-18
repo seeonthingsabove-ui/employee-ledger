@@ -18,6 +18,7 @@ View your app in AI Studio: https://ai.studio/apps/temp/1
    - `SHEETS_API_KEY` and `SHEET_ID` for Google Sheet access (acts as DB)
    - Optional overrides:
      - `SHEET_EMPLOYEE_RANGE` (default `employeedetails!A:E` with headers: S_NO, EMP_CODE, EMP_NAME, ROLE, EMAIL_ID)
+     - `SHEET_LOOKUP_RANGE` (default `LookUp!A:B` where col A = Permission Type and col B = Leave Type)
      - `SHEET_LOG_RANGE` (default `logs!A:I`)
    - To append logs securely, set `SHEET_LOG_WEBHOOK` (e.g., Apps Script Web App URL) that takes the posted log entry and writes to the log sheet.
    - `GOOGLE_CLIENT_ID` for Google Sign-In (from Google Cloud console OAuth client; type Web)

@@ -9,6 +9,10 @@ export interface LeaveRequest {
   employeeName: string;
   employeeEmail: string;
   employeeId: string;
+  permissionType?: string;
+  leaveType?: string;
+  requestedInTime?: string;
+  requestedOutTime?: string;
   startDate: string;
   endDate: string;
   reason: string;
@@ -39,6 +43,10 @@ export interface LogEntry {
   employeeName: string;
   employeeEmail: string;
   employeeId: string;
+  permissionType?: string;
+  leaveType?: string;
+  requestedInTime?: string;
+  requestedOutTime?: string;
   startDate: string;
   endDate: string;
   reason: string;

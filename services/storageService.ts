@@ -15,7 +15,7 @@ export const saveRequest = (request: LeaveRequest): void => {
 
 export const updateRequestStatus = (id: string, status: LeaveStatus, managerComment?: string): void => {
   const current = getRequests();
-  const updated = current.map((req) => 
+  const updated = current.map((req) =>
     req.id === id ? { ...req, status, managerComment } : req
   );
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
@@ -30,6 +30,10 @@ export const seedData = () => {
         employeeName: 'John Doe',
         employeeEmail: 'john.doe@company.com',
         employeeId: 'EMP001',
+        permissionType: 'leave',
+        leaveType: 'Casual Leave',
+        requestedInTime: '',
+        requestedOutTime: '',
         startDate: '2023-11-10',
         endDate: '2023-11-12',
         reason: 'Personal family matter',
@@ -42,6 +46,10 @@ export const seedData = () => {
         employeeName: 'Jane Smith',
         employeeEmail: 'jane.smith@company.com',
         employeeId: 'EMP004',
+        permissionType: 'leave',
+        leaveType: 'Sick Leave',
+        requestedInTime: '',
+        requestedOutTime: '',
         startDate: '2023-10-01',
         endDate: '2023-10-05',
         reason: 'Medical recovery',

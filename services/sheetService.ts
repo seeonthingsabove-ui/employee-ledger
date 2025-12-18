@@ -2,13 +2,15 @@ import { EmployeeRecord, LogEntry, UserProfile } from '../types';
 
 const CACHE_KEY = 'swiftleave_user_roles_cache';
 const DIRECTORY_CACHE_KEY = 'swiftleave_employee_directory_cache';
+const LOOKUP_CACHE_KEY = 'swiftleave_lookup_cache_v1';
 
 const getEnv = () => ({
     sheetId: process.env.SHEET_ID,
     apiKey: process.env.SHEETS_API_KEY,
     employeeRange: process.env.SHEET_EMPLOYEE_RANGE || 'employeedetails!A:E', // Headers: S_NO, EMP_CODE, EMP_NAME, ROLE, EMAIL_ID
-    logRange: process.env.SHEET_LOG_RANGE || 'logs!A:I', // Timestamp, Type, Status, Name, Email, EmpId, Dates, Reason, ManagerNote
+    logRange: process.env.SHEET_LOG_RANGE || 'Logs!A:O', // Logs sheet (A:O) as written by Apps Script
     logWebhook: process.env.SHEET_LOG_WEBHOOK, // Apps Script / API endpoint to append rows securely
+    lookupRange: (process.env.SHEET_LOOKUP_RANGE as string | undefined) || 'LookUp!A:B', // Col A: Permission Type, Col B: Leave Type
 });
 
 const loadCache = <T>(key: string): Record<string, T> => {
@@ -122,4 +124,240 @@ export const appendLogEntry = async (entry: LogEntry): Promise<boolean> => {
 export const clearRoleCache = () => {
     localStorage.removeItem(CACHE_KEY);
     localStorage.removeItem(DIRECTORY_CACHE_KEY);
+    localStorage.removeItem(LOOKUP_CACHE_KEY);
+};
+
+export type LookupOptions = {
+    permissionTypes: string[];
+    leaveTypes: string[];
+};
+
+const normalizeOption = (v: unknown) => (typeof v === 'string' ? v.trim() : '').trim();
+const uniq = (arr: string[]) => Array.from(new Set(arr.filter(Boolean)));
+
+const parseLookup = (values: string[][]): LookupOptions => {
+    if (!values || values.length === 0) return { permissionTypes: [], leaveTypes: [] };
+
+    const normalizeHeaderKey = (v: string) => normalizeOption(v).toLowerCase().replace(/[\s_]+/g, '');
+    const firstA = normalizeHeaderKey(values[0]?.[0] || '');
+    const firstB = normalizeHeaderKey(values[0]?.[1] || '');
+    const hasHeader =
+        firstA === 'permissiontype' ||
+        firstB === 'leavetype' ||
+        (firstA === 'permissiontype' && firstB === 'leavetype');
+
+    const rows = values.slice(hasHeader ? 1 : 0);
+
+    const permissionTypes = uniq(rows.map((r) => normalizeOption(r?.[0])));
+    const leaveTypes = uniq(rows.map((r) => normalizeOption(r?.[1])));
+
+    return { permissionTypes, leaveTypes };
+};
+
+export const fetchLookupOptions = async (): Promise<LookupOptions> => {
+    const { sheetId, apiKey, lookupRange } = getEnv();
+    if (!sheetId || !apiKey) {
+        console.warn('Sheets env missing. Provide SHEET_ID and SHEETS_API_KEY to enable lookup dropdowns.');
+        const cached = loadCache<LookupOptions>(LOOKUP_CACHE_KEY);
+        return (cached['options'] as LookupOptions) || { permissionTypes: [], leaveTypes: [] };
+    }
+
+    try {
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(lookupRange)}?key=${apiKey}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+            console.error('Sheets API error (lookup)', res.status, await res.text());
+            const cached = loadCache<LookupOptions>(LOOKUP_CACHE_KEY);
+            return (cached['options'] as LookupOptions) || { permissionTypes: [], leaveTypes: [] };
+        }
+        const data = await res.json();
+        const parsed = parseLookup(data.values);
+        saveCache(LOOKUP_CACHE_KEY, { options: parsed } as unknown as Record<string, LookupOptions>);
+        return parsed;
+    } catch (err) {
+        console.error('Failed to fetch lookup options from Sheets', err);
+        const cached = loadCache<LookupOptions>(LOOKUP_CACHE_KEY);
+        return (cached['options'] as LookupOptions) || { permissionTypes: [], leaveTypes: [] };
+    }
+};
+
+export type LogSheetRecord = {
+    timestamp: string;
+    requestId: string;
+    type: string;
+    status: string;
+    employeeName: string;
+    employeeEmail: string;
+    employeeId: string;
+    dates: string;
+    reason: string;
+    managerComment: string;
+    managerAction: string;
+    permissionType: string;
+    leaveType: string;
+    requestedInTime: string;
+    requestedOutTime: string;
+};
+
+const getCellString = (row: unknown[], idx: number) => {
+    const v = (row as any[])?.[idx];
+    if (v === null || v === undefined) return '';
+    return String(v).trim();
+};
+
+const parseLogSheetRecords = (values: string[][]): LogSheetRecord[] => {
+    if (!values || values.length < 2) return [];
+
+    // Apps Script writes a header row; we’ll treat the first row as header if it looks like one.
+    const firstRow = values[0] || [];
+    const firstA = (firstRow[0] || '').toString().trim().toLowerCase();
+    const hasHeader = firstA === 'timestamp';
+
+    const rows = values.slice(hasHeader ? 1 : 0);
+
+    return rows
+        .filter((r) => r && r.length)
+        .map((r) => ({
+            timestamp: getCellString(r, 0),
+            requestId: getCellString(r, 1),
+            type: getCellString(r, 2),
+            status: getCellString(r, 3),
+            employeeName: getCellString(r, 4),
+            employeeEmail: getCellString(r, 5).toLowerCase(),
+            employeeId: getCellString(r, 6),
+            dates: getCellString(r, 7),
+            reason: getCellString(r, 8),
+            managerComment: getCellString(r, 9),
+            managerAction: getCellString(r, 10),
+            permissionType: getCellString(r, 11),
+            leaveType: getCellString(r, 12),
+            requestedInTime: getCellString(r, 13),
+            requestedOutTime: getCellString(r, 14),
+        }))
+        .filter((r) => r.employeeEmail || r.employeeId || r.employeeName);
+};
+
+const tryFetchSheetValues_ = async (range: string): Promise<string[][] | null> => {
+    const { sheetId, apiKey } = getEnv();
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}?key=${apiKey}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data.values as string[][]) || [];
+};
+
+export const fetchEmployeeLogHistory = async (employeeEmail: string): Promise<LogSheetRecord[]> => {
+    const { sheetId, apiKey, logRange } = getEnv();
+    const normalizedEmail = employeeEmail.trim().toLowerCase();
+    if (!normalizedEmail) return [];
+
+    if (!sheetId || !apiKey) {
+        console.warn('Sheets env missing. Provide SHEET_ID and SHEETS_API_KEY to enable Leave History.');
+        return [];
+    }
+
+    try {
+        // Try configured range first; then common fallbacks (case + width).
+        const rangesToTry = [
+            logRange,
+            'Logs!A:O',
+            'logs!A:O',
+            'Logs!A:K',
+            'logs!A:K',
+        ];
+
+        let values: string[][] | null = null;
+        for (const r of rangesToTry) {
+            values = await tryFetchSheetValues_(r);
+            if (values) break;
+        }
+
+        const records = parseLogSheetRecords(values || []);
+        const filtered = records.filter((r) => r.employeeEmail === normalizedEmail);
+
+        // Sort newest-first when possible
+        filtered.sort((a, b) => {
+            const ta = Date.parse(a.timestamp);
+            const tb = Date.parse(b.timestamp);
+            if (Number.isNaN(ta) || Number.isNaN(tb)) return 0;
+            return tb - ta;
+        });
+
+        return filtered;
+    } catch (err) {
+        console.error('Failed to fetch employee log history from Sheets', err);
+        return [];
+    }
+};
+
+export const fetchLogRecords = async (): Promise<LogSheetRecord[]> => {
+    const { sheetId, apiKey, logRange } = getEnv();
+
+    if (!sheetId || !apiKey) {
+        console.warn('Sheets env missing. Provide SHEET_ID and SHEETS_API_KEY to enable Manager approvals.');
+        return [];
+    }
+
+    try {
+        const rangesToTry = [
+            logRange,
+            'Logs!A:O',
+            'logs!A:O',
+            'Logs!A:K',
+            'logs!A:K',
+        ];
+
+        let values: string[][] | null = null;
+        for (const r of rangesToTry) {
+            values = await tryFetchSheetValues_(r);
+            if (values) break;
+        }
+
+        const records = parseLogSheetRecords(values || []);
+
+        // Sort newest-first when possible
+        records.sort((a, b) => {
+            const ta = Date.parse(a.timestamp);
+            const tb = Date.parse(b.timestamp);
+            if (Number.isNaN(ta) || Number.isNaN(tb)) return 0;
+            return tb - ta;
+        });
+
+        return records;
+    } catch (err) {
+        console.error('Failed to fetch log records from Sheets', err);
+        return [];
+    }
+};
+
+export const submitDecisionToLogs = async (params: {
+    requestId: string;
+    status: 'APPROVED' | 'REJECTED';
+    managerComment?: string;
+}): Promise<boolean> => {
+    const { logWebhook } = getEnv();
+    if (!logWebhook) {
+        console.warn('No log webhook configured; cannot submit manager decision.');
+        return false;
+    }
+
+    try {
+        // Keep it "simple request" to avoid browser preflight.
+        await fetch(logWebhook, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({
+                type: 'decision',
+                requestId: params.requestId,
+                status: params.status,
+                managerComment: params.managerComment || '',
+                timestamp: Date.now(),
+            }),
+        });
+        return true;
+    } catch (err) {
+        console.error('Network or CORS error during decision submission. Check deployed script permissions and URL.', err);
+        return false;
+    }
 };

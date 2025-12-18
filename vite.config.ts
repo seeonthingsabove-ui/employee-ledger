@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => {
       'process.env.SHEET_EMPLOYEE_RANGE': JSON.stringify(env.SHEET_EMPLOYEE_RANGE),
       'process.env.SHEET_LOG_RANGE': JSON.stringify(env.SHEET_LOG_RANGE),
       'process.env.SHEET_LOG_WEBHOOK': JSON.stringify(env.SHEET_LOG_WEBHOOK),
+      'process.env.SHEET_LOOKUP_RANGE': JSON.stringify(env.SHEET_LOOKUP_RANGE),
       'process.env.GOOGLE_CLIENT_ID': JSON.stringify(env.GOOGLE_CLIENT_ID)
     },
     resolve: {
