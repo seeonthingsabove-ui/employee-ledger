@@ -62,6 +62,15 @@ const LeaveForm: React.FC<{
   }, []);
 
   const isPermission = normalize(formData.permissionType) === 'permission';
+  const normalizedLeaveType = normalize(formData.leaveType);
+  const showInTimeField =
+    isPermission &&
+    (normalizedLeaveType === normalize('FN Permission') ||
+      normalizedLeaveType === normalize('In Between Permission'));
+  const showOutTimeField =
+    isPermission &&
+    (normalizedLeaveType === normalize('AN Permission') ||
+      normalizedLeaveType === normalize('In Between Permission'));
 
   const filteredLeaveTypeOptions = (() => {
     const normalizedPermissionOnly = new Set(PERMISSION_ONLY_LEAVE_TYPES.map((t) => normalize(t)));
@@ -95,6 +104,25 @@ const LeaveForm: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.permissionType]);
 
+  useEffect(() => {
+    // When leave type changes within "permission", clear any time fields that are no longer needed.
+    setFormData((prev) => {
+      const isPerm = normalize(prev.permissionType) === 'permission';
+      const lt = normalize(prev.leaveType);
+      const needsIn =
+        isPerm &&
+        (lt === normalize('FN Permission') || lt === normalize('In Between Permission'));
+      const needsOut =
+        isPerm &&
+        (lt === normalize('AN Permission') || lt === normalize('In Between Permission'));
+      const next = { ...prev };
+      if (!needsIn) next.requestedInTime = '';
+      if (!needsOut) next.requestedOutTime = '';
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.permissionType, formData.leaveType]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -106,8 +134,8 @@ const LeaveForm: React.FC<{
       employeeId: formData.empId,
       permissionType: formData.permissionType,
       leaveType: formData.leaveType,
-      requestedInTime: isPermission ? formData.requestedInTime : '',
-      requestedOutTime: isPermission ? formData.requestedOutTime : '',
+      requestedInTime: showInTimeField ? formData.requestedInTime : '',
+      requestedOutTime: showOutTimeField ? formData.requestedOutTime : '',
       startDate: formData.startDate,
       endDate: formData.endDate,
       reason: formData.reason,
@@ -234,30 +262,34 @@ const LeaveForm: React.FC<{
           </div>
         </div>
 
-        {isPermission && (
+        {(showInTimeField || showOutTimeField) && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Requested InTime</label>
-              <input
-                type="time"
-                name="requestedInTime"
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
-                value={formData.requestedInTime}
-                onChange={handleInputChange}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Requested OutTime</label>
-              <input
-                type="time"
-                name="requestedOutTime"
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
-                value={formData.requestedOutTime}
-                onChange={handleInputChange}
-              />
-            </div>
+            {showInTimeField && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Requested InTime</label>
+                <input
+                  type="time"
+                  name="requestedInTime"
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
+                  value={formData.requestedInTime}
+                  onChange={handleInputChange}
+                />
+              </div>
+            )}
+            {showOutTimeField && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Requested OutTime</label>
+                <input
+                  type="time"
+                  name="requestedOutTime"
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
+                  value={formData.requestedOutTime}
+                  onChange={handleInputChange}
+                />
+              </div>
+            )}
           </div>
         )}
 
