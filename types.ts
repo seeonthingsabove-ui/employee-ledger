@@ -62,6 +62,7 @@ export interface TaskFormData {
   fulfillment: string;
   task: string;
   quantity: number;
+  claimedQuantity: number;
 }
 
 export interface TaskEntry {
@@ -73,5 +74,6 @@ export interface TaskEntry {
   fulfillment: string;
   task: string;
   quantity: number;
+  claimedQuantity: number;
   timestamp: string;
 }

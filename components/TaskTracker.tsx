@@ -67,6 +67,9 @@ const TaskTracker: React.FC<TaskTrackerProps> = ({ userEmail }) => {
               <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                 Quantity
               </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Claimed Qty
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
@@ -89,6 +92,9 @@ const TaskTracker: React.FC<TaskTrackerProps> = ({ userEmail }) => {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
                   {task.quantity}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
+                  {task.claimedQuantity || "-"}
                 </td>
               </tr>
             ))}

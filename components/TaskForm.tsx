@@ -22,6 +22,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ user, onSuccess }) => {
   const [fulfillment, setFulfillment] = useState("");
   const [task, setTask] = useState("");
   const [quantity, setQuantity] = useState("");
+  const [claimedQuantity, setClaimedQuantity] = useState("0");
 
   useEffect(() => {
     const loadLookups = async () => {
@@ -66,6 +67,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ user, onSuccess }) => {
       fulfillment: isFulfillmentEnabled ? fulfillment : "",
       task,
       quantity: parseInt(quantity, 10),
+      claimedQuantity: task === "Return Cleared" ? parseInt(claimedQuantity, 10) : 0,
       timestamp: Date.now(),
     };
 
@@ -79,6 +81,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ user, onSuccess }) => {
       setFulfillment("");
       setTask("");
       setQuantity("");
+      setClaimedQuantity("0");
       onSuccess();
     } else {
       alert("Failed to submit task. Please try again.");
@@ -214,12 +217,32 @@ const TaskForm: React.FC<TaskFormProps> = ({ user, onSuccess }) => {
             id="quantity"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
+            onWheel={(e) => e.currentTarget.blur()}
             min="1"
             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             placeholder="Enter quantity"
             required
           />
         </div>
+
+        {/* Claimed Quantity (conditional - only show for Return Cleared) */}
+        {task === "Return Cleared" && (
+          <div>
+            <label htmlFor="claimedQuantity" className="block text-sm font-medium text-slate-700 mb-1">
+              Claimed Quantity
+            </label>
+            <input
+              type="number"
+              id="claimedQuantity"
+              value={claimedQuantity}
+              onChange={(e) => setClaimedQuantity(e.target.value)}
+              onWheel={(e) => e.currentTarget.blur()}
+              min="0"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              placeholder="0"
+            />
+          </div>
+        )}
 
         {/* Submit Button */}
         <div className="pt-4">

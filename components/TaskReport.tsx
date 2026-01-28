@@ -83,6 +83,7 @@ const TaskReport: React.FC = () => {
       "Fulfillment",
       "Task",
       "Quantity",
+      "Claimed Quantity",
     ];
 
     const rows = filteredTasks.map((task) => [
@@ -94,6 +95,7 @@ const TaskReport: React.FC = () => {
       task.fulfillment || "-",
       task.task,
       task.quantity,
+      task.claimedQuantity || 0,
     ]);
 
     const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
@@ -264,6 +266,9 @@ const TaskReport: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                     Quantity
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    Claimed Qty
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-slate-200">
@@ -290,6 +295,9 @@ const TaskReport: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
                       {task.quantity}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
+                      {task.claimedQuantity || "-"}
                     </td>
                   </tr>
                 ))}

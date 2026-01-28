@@ -424,6 +424,7 @@ export type TaskLogEntry = {
     fulfillment: string;
     task: string;
     quantity: number;
+    claimedQuantity: number;
     timestamp: number;
 };
 
@@ -459,36 +460,33 @@ export type TaskLogRecord = {
     platform: string;
     fulfillment: string;
     task: string;
-    quantity: string;
+    quantity: number;
+    claimedQuantity: number;
 };
 
-const parseTaskLogRecords = (values: string[][]): TaskLogRecord[] => {
-    if (!values || values.length < 2) return [];
-
-    const firstRow = values[0] || [];
-    const firstA = (firstRow[0] || '').toString().trim().toLowerCase();
-    const hasHeader = firstA === 'timestamp';
-
-    const rows = values.slice(hasHeader ? 1 : 0);
-
-    return rows
-        .filter(r => r && r.length)
-        .map(r => ({
-            timestamp: getCellString(r, 0),
-            employeeName: getCellString(r, 1),
-            employeeEmail: getCellString(r, 2).toLowerCase(),
-            company: getCellString(r, 3),
-            platform: getCellString(r, 4),
-            fulfillment: getCellString(r, 5),
-            task: getCellString(r, 6),
-            quantity: getCellString(r, 7),
-        }))
-        .filter(r => r.employeeEmail);
-};
+function parseTaskLogRecords(rows: any[][]): TaskLogRecord[] {
+    if (!rows || rows.length < 2) return [];
+    const records: TaskLogRecord[] = [];
+    for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        records.push({
+            timestamp: String(r[0] || ''),
+            employeeName: String(r[1] || ''),
+            employeeEmail: String(r[2] || ''),
+            company: String(r[3] || ''),
+            platform: String(r[4] || ''),
+            fulfillment: String(r[5] || ''),
+            task: String(r[6] || ''),
+            quantity: Number(r[7]) || 0,
+            claimedQuantity: Number(r[8]) || 0,
+        });
+    }
+    return records;
+}
 
 export const fetchUserTasks = async (employeeEmail: string): Promise<TaskLogRecord[]> => {
     const { sheetId, apiKey } = getEnv();
-    const taskLogsRange = 'TaskLogs!A:H';
+    const taskLogsRange = 'TaskLogs!A:I';
     const normalizedEmail = employeeEmail.trim().toLowerCase();
 
     if (!normalizedEmail) return [];
@@ -519,7 +517,7 @@ export const fetchUserTasks = async (employeeEmail: string): Promise<TaskLogReco
 
 export const fetchAllTaskLogs = async (): Promise<TaskLogRecord[]> => {
     const { sheetId, apiKey } = getEnv();
-    const taskLogsRange = 'TaskLogs!A:H';
+    const taskLogsRange = 'TaskLogs!A:I'; // Updated to include claimedQuantity column
 
     if (!sheetId || !apiKey) {
         console.warn('Sheets env missing. Provide SHEET_ID and SHEETS_API_KEY to enable Task Reports.');
