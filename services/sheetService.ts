@@ -361,3 +361,186 @@ export const submitDecisionToLogs = async (params: {
         return false;
     }
 };
+
+// Task Manager Service Functions
+const TASK_LOOKUP_CACHE_KEY = 'task_lookup_cache';
+const TASK_LOGS_CACHE_KEY = 'task_logs_cache';
+
+export type TaskLookups = {
+    companies: string[];
+    platforms: string[];
+    fulfillments: string[];
+    tasks: string[];
+};
+
+const parseTaskLookups = (values: string[][]): TaskLookups => {
+    if (!values || values.length < 2) return { companies: [], platforms: [], fulfillments: [], tasks: [] };
+
+    // Assuming first row is header, columns C-F are: Company, Platform, Fulfillment, Task
+    const rows = values.slice(1);
+
+    const companies = uniq(rows.map(r => normalizeOption(r?.[2]))); // Column C (index 2)
+    const platforms = uniq(rows.map(r => normalizeOption(r?.[3]))); // Column D (index 3)
+    const fulfillments = uniq(rows.map(r => normalizeOption(r?.[4]))); // Column E (index 4)
+    const tasks = uniq(rows.map(r => normalizeOption(r?.[5]))); // Column F (index 5)
+
+    return { companies, platforms, fulfillments, tasks };
+};
+
+export const fetchTaskLookups = async (): Promise<TaskLookups> => {
+    const { sheetId, apiKey } = getEnv();
+    const taskLookupRange = 'LookUp!A:F'; // Fetch columns A-F to get C-F
+
+    if (!sheetId || !apiKey) {
+        console.warn('Sheets env missing. Provide SHEET_ID and SHEETS_API_KEY to enable task lookups.');
+        const cached = loadCache<TaskLookups>(TASK_LOOKUP_CACHE_KEY);
+        return (cached['options'] as TaskLookups) || { companies: [], platforms: [], fulfillments: [], tasks: [] };
+    }
+
+    try {
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(taskLookupRange)}?key=${apiKey}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+            console.error('Sheets API error (task lookup)', res.status, await res.text());
+            const cached = loadCache<TaskLookups>(TASK_LOOKUP_CACHE_KEY);
+            return (cached['options'] as TaskLookups) || { companies: [], platforms: [], fulfillments: [], tasks: [] };
+        }
+        const data = await res.json();
+        const parsed = parseTaskLookups(data.values);
+        saveCache(TASK_LOOKUP_CACHE_KEY, { options: parsed } as unknown as Record<string, TaskLookups>);
+        return parsed;
+    } catch (err) {
+        console.error('Failed to fetch task lookups from Sheets', err);
+        const cached = loadCache<TaskLookups>(TASK_LOOKUP_CACHE_KEY);
+        return (cached['options'] as TaskLookups) || { companies: [], platforms: [], fulfillments: [], tasks: [] };
+    }
+};
+
+export type TaskLogEntry = {
+    employeeEmail: string;
+    employeeName: string;
+    company: string;
+    platform: string;
+    fulfillment: string;
+    task: string;
+    quantity: number;
+    timestamp: number;
+};
+
+export const submitTask = async (entry: TaskLogEntry): Promise<boolean> => {
+    const { logWebhook } = getEnv();
+    if (!logWebhook) {
+        console.warn('No log webhook configured; skipping task submission.');
+        return false;
+    }
+
+    try {
+        await fetch(logWebhook, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({
+                type: 'task',
+                ...entry
+            }),
+        });
+        return true;
+    } catch (err) {
+        console.error('Network error during task submission.', err);
+        return false;
+    }
+};
+
+export type TaskLogRecord = {
+    timestamp: string;
+    employeeName: string;
+    employeeEmail: string;
+    company: string;
+    platform: string;
+    fulfillment: string;
+    task: string;
+    quantity: string;
+};
+
+const parseTaskLogRecords = (values: string[][]): TaskLogRecord[] => {
+    if (!values || values.length < 2) return [];
+
+    const firstRow = values[0] || [];
+    const firstA = (firstRow[0] || '').toString().trim().toLowerCase();
+    const hasHeader = firstA === 'timestamp';
+
+    const rows = values.slice(hasHeader ? 1 : 0);
+
+    return rows
+        .filter(r => r && r.length)
+        .map(r => ({
+            timestamp: getCellString(r, 0),
+            employeeName: getCellString(r, 1),
+            employeeEmail: getCellString(r, 2).toLowerCase(),
+            company: getCellString(r, 3),
+            platform: getCellString(r, 4),
+            fulfillment: getCellString(r, 5),
+            task: getCellString(r, 6),
+            quantity: getCellString(r, 7),
+        }))
+        .filter(r => r.employeeEmail);
+};
+
+export const fetchUserTasks = async (employeeEmail: string): Promise<TaskLogRecord[]> => {
+    const { sheetId, apiKey } = getEnv();
+    const taskLogsRange = 'TaskLogs!A:H';
+    const normalizedEmail = employeeEmail.trim().toLowerCase();
+
+    if (!normalizedEmail) return [];
+    if (!sheetId || !apiKey) {
+        console.warn('Sheets env missing. Provide SHEET_ID and SHEETS_API_KEY to enable Task History.');
+        return [];
+    }
+
+    try {
+        const values = await tryFetchSheetValues_(taskLogsRange);
+        const records = parseTaskLogRecords(values || []);
+        const filtered = records.filter(r => r.employeeEmail === normalizedEmail);
+
+        // Sort newest-first
+        filtered.sort((a, b) => {
+            const ta = Date.parse(a.timestamp);
+            const tb = Date.parse(b.timestamp);
+            if (Number.isNaN(ta) || Number.isNaN(tb)) return 0;
+            return tb - ta;
+        });
+
+        return filtered;
+    } catch (err) {
+        console.error('Failed to fetch user tasks from Sheets', err);
+        return [];
+    }
+};
+
+export const fetchAllTaskLogs = async (): Promise<TaskLogRecord[]> => {
+    const { sheetId, apiKey } = getEnv();
+    const taskLogsRange = 'TaskLogs!A:H';
+
+    if (!sheetId || !apiKey) {
+        console.warn('Sheets env missing. Provide SHEET_ID and SHEETS_API_KEY to enable Task Reports.');
+        return [];
+    }
+
+    try {
+        const values = await tryFetchSheetValues_(taskLogsRange);
+        const records = parseTaskLogRecords(values || []);
+
+        // Sort newest-first
+        records.sort((a, b) => {
+            const ta = Date.parse(a.timestamp);
+            const tb = Date.parse(b.timestamp);
+            if (Number.isNaN(ta) || Number.isNaN(tb)) return 0;
+            return tb - ta;
+        });
+
+        return records;
+    } catch (err) {
+        console.error('Failed to fetch all task logs from Sheets', err);
+        return [];
+    }
+};

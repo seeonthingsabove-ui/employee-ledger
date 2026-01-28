@@ -39,18 +39,6 @@ export interface EmployeeRecord {
 
 export interface LogEntry {
   type: 'request' | 'decision';
-  status: LeaveStatus;
-  employeeName: string;
-  employeeEmail: string;
-  employeeId: string;
-  permissionType?: string;
-  leaveType?: string;
-  requestedInTime?: string;
-  requestedOutTime?: string;
-  startDate: string;
-  endDate: string;
-  reason: string;
-  managerComment?: string;
   timestamp: number;
 }
 
@@ -58,4 +46,32 @@ export interface AuthenticatedUser {
   email: string;
   name?: string;
   picture?: string;
+}
+
+// Task Manager Types
+export interface TaskLookups {
+  companies: string[];
+  platforms: string[];
+  fulfillments: string[];
+  tasks: string[];
+}
+
+export interface TaskFormData {
+  company: string;
+  platform: string;
+  fulfillment: string;
+  task: string;
+  quantity: number;
+}
+
+export interface TaskEntry {
+  id: string;
+  employeeEmail: string;
+  employeeName: string;
+  company: string;
+  platform: string;
+  fulfillment: string;
+  task: string;
+  quantity: number;
+  timestamp: string;
 }
