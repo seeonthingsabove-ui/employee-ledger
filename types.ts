@@ -19,6 +19,7 @@ export interface LeaveRequest {
   aiGeneratedEmail: string;
   status: LeaveStatus;
   managerComment?: string;
+  alternateStaff?: string;
   timestamp: number;
 }
 
@@ -40,6 +41,21 @@ export interface EmployeeRecord {
 export interface LogEntry {
   type: 'request' | 'decision';
   timestamp: number;
+  // Optional fields for request logging
+  status?: string;
+  employeeName?: string;
+  employeeEmail?: string;
+  employeeId?: string;
+  permissionType?: string;
+  leaveType?: string;
+  requestedInTime?: string;
+  requestedOutTime?: string;
+  startDate?: string;
+  endDate?: string;
+  reason?: string;
+  managerComment?: string;
+  alternateStaff?: string;
+  requestId?: string;
 }
 
 export interface AuthenticatedUser {

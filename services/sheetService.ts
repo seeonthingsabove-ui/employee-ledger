@@ -195,8 +195,10 @@ export type LogSheetRecord = {
     managerAction: string;
     permissionType: string;
     leaveType: string;
+
     requestedInTime: string;
     requestedOutTime: string;
+    alternateStaff: string;
 };
 
 const getCellString = (row: unknown[], idx: number) => {
@@ -233,6 +235,7 @@ const parseLogSheetRecords = (values: string[][]): LogSheetRecord[] => {
             leaveType: getCellString(r, 12),
             requestedInTime: getCellString(r, 13),
             requestedOutTime: getCellString(r, 14),
+            alternateStaff: getCellString(r, 15),
         }))
         .filter((r) => r.employeeEmail || r.employeeId || r.employeeName);
 };

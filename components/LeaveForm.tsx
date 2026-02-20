@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { LeaveRequest, LeaveStatus } from '../types';
 import { saveRequest } from '../services/storageService';
-import { appendLogEntry, fetchLookupOptions } from '../services/sheetService';
+import { appendLogEntry, fetchLookupOptions, fetchEmployeeDirectory } from '../services/sheetService';
+import { EmployeeRecord } from '../types';
 
 const PERMISSION_ONLY_LEAVE_TYPES = ['FN Permission', 'AN Permission', 'In Between Permission'];
 const normalize = (v: string) => v.trim().toLowerCase();
@@ -20,11 +21,13 @@ const LeaveForm: React.FC<{
     requestedOutTime: '',
     startDate: '',
     endDate: '',
+    alternateStaff: '',
     reason: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [permissionTypeOptions, setPermissionTypeOptions] = useState<string[]>([]);
   const [leaveTypeOptions, setLeaveTypeOptions] = useState<string[]>([]);
+  const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [lookupError, setLookupError] = useState<string | null>(null);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -47,18 +50,23 @@ const LeaveForm: React.FC<{
   }, [initialEmployee]);
 
   useEffect(() => {
-    const loadLookups = async () => {
+    const loadData = async () => {
       try {
-        const { permissionTypes, leaveTypes } = await fetchLookupOptions();
+        const [{ permissionTypes, leaveTypes }, employeeList] = await Promise.all([
+          fetchLookupOptions(),
+          fetchEmployeeDirectory(),
+        ]);
+
         setPermissionTypeOptions(permissionTypes);
         setLeaveTypeOptions(leaveTypes);
+        setEmployees(employeeList.filter(e => e.role === 'employee')); // Filter for employees only
         setLookupError(null);
       } catch (e) {
         console.error(e);
-        setLookupError('Failed to load dropdown options from LookUp sheet.');
+        setLookupError('Failed to load form data.');
       }
     };
-    loadLookups();
+    loadData();
   }, []);
 
   const isPermission = normalize(formData.permissionType) === 'permission';
@@ -138,6 +146,7 @@ const LeaveForm: React.FC<{
       requestedOutTime: showOutTimeField ? formData.requestedOutTime : '',
       startDate: formData.startDate,
       endDate: formData.endDate,
+      alternateStaff: formData.alternateStaff,
       reason: formData.reason,
       aiGeneratedEmail: formData.reason,
       status: LeaveStatus.PENDING,
@@ -159,6 +168,7 @@ const LeaveForm: React.FC<{
         requestedOutTime: newRequest.requestedOutTime,
         startDate: newRequest.startDate,
         endDate: newRequest.endDate,
+        alternateStaff: newRequest.alternateStaff,
         reason: newRequest.reason,
         timestamp: newRequest.timestamp,
       });
@@ -315,6 +325,7 @@ const LeaveForm: React.FC<{
               type="date"
               name="startDate"
               required
+              min={new Date().toLocaleDateString('en-CA')}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
               value={formData.startDate}
               onChange={handleInputChange}
@@ -326,11 +337,29 @@ const LeaveForm: React.FC<{
               type="date"
               name="endDate"
               required
+              min={formData.startDate || new Date().toLocaleDateString('en-CA')}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
               value={formData.endDate}
               onChange={handleInputChange}
             />
           </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Alternate Staff</label>
+          <select
+            name="alternateStaff"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition bg-white"
+            value={formData.alternateStaff}
+            onChange={handleSelectChange}
+          >
+            <option value="">Select Alternate Staff (Optional)</option>
+            {employees.map((emp) => (
+              <option key={emp.employeeId} value={emp.name}>
+                {emp.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div>
