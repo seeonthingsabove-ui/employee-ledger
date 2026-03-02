@@ -274,31 +274,60 @@ const LeaveForm: React.FC<{
 
         {(showInTimeField || showOutTimeField) && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {showInTimeField && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Requested InTime</label>
-                <input
-                  type="time"
-                  name="requestedInTime"
-                  required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
-                  value={formData.requestedInTime}
-                  onChange={handleInputChange}
-                />
-              </div>
-            )}
-            {showOutTimeField && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Requested OutTime</label>
-                <input
-                  type="time"
-                  name="requestedOutTime"
-                  required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
-                  value={formData.requestedOutTime}
-                  onChange={handleInputChange}
-                />
-              </div>
+            {normalizedLeaveType === normalize('In Between Permission') ? (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Requested OutTime</label>
+                  <input
+                    type="time"
+                    name="requestedOutTime"
+                    required
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
+                    value={formData.requestedOutTime}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Requested InTime</label>
+                  <input
+                    type="time"
+                    name="requestedInTime"
+                    required
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
+                    value={formData.requestedInTime}
+                    onChange={handleInputChange}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                {showInTimeField && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Requested InTime</label>
+                    <input
+                      type="time"
+                      name="requestedInTime"
+                      required
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
+                      value={formData.requestedInTime}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                )}
+                {showOutTimeField && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Requested OutTime</label>
+                    <input
+                      type="time"
+                      name="requestedOutTime"
+                      required
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
+                      value={formData.requestedOutTime}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -353,7 +382,7 @@ const LeaveForm: React.FC<{
             value={formData.alternateStaff}
             onChange={handleSelectChange}
           >
-            <option value="">Select Alternate Staff (Optional)</option>
+            <option value="">Select Alternate Staff</option>
             {employees.map((emp) => (
               <option key={emp.employeeId} value={emp.name}>
                 {emp.name}
