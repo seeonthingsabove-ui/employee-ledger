@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   fetchEmployeeLogHistory,
+  deleteLogEntry,
   LogSheetRecord,
 } from "../services/sheetService";
+import LeaveForm from "./LeaveForm";
 
 const LeaveHistory: React.FC<{ employeeEmail: string }> = ({
   employeeEmail,
@@ -11,6 +13,22 @@ const LeaveHistory: React.FC<{ employeeEmail: string }> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshSeq, setRefreshSeq] = useState(0);
+  const [editingRecord, setEditingRecord] = useState<LogSheetRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async (requestId: string) => {
+    if (!confirm("Are you sure you want to delete this leave request?")) return;
+    setIsDeleting(true);
+    try {
+      await deleteLogEntry(requestId);
+      setRefreshSeq(s => s + 1);
+    } catch (e) {
+      console.error(e);
+      alert("Failed to delete the request.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -43,9 +61,11 @@ const LeaveHistory: React.FC<{ employeeEmail: string }> = ({
       { key: "requestedInTime", label: "InTime" },
       { key: "requestedOutTime", label: "OutTime" },
       { key: "dates", label: "Dates" },
+      { key: "alternateStaff", label: "Alternate Staff" },
       { key: "reason", label: "Reason" },
       { key: "managerComment", label: "Manager Comment" },
       { key: "managerAction", label: "Manager Action" },
+      { key: "actions", label: "Actions" },
     ],
     []
   );
@@ -134,6 +154,9 @@ const LeaveHistory: React.FC<{ employeeEmail: string }> = ({
                   <td className="px-4 py-2 whitespace-nowrap">
                     {r.dates || "-"}
                   </td>
+                  <td className="px-4 py-2 whitespace-nowrap">
+                    {r.alternateStaff || "-"}
+                  </td>
                   <td className="px-4 py-2 min-w-[260px]">
                     <span title={r.reason || ""}>{r.reason || "-"}</span>
                   </td>
@@ -143,10 +166,44 @@ const LeaveHistory: React.FC<{ employeeEmail: string }> = ({
                   <td className="px-4 py-2 whitespace-nowrap">
                     {r.managerAction || "-"}
                   </td>
+                  <td className="px-4 py-2 whitespace-nowrap space-x-2">
+                    {(r.status?.toUpperCase() === "PENDING" || !r.status) && (
+                      <>
+                        <button
+                          onClick={() => setEditingRecord(r)}
+                          className="text-emerald-600 hover:text-emerald-800 text-xs font-semibold mr-2"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(r.requestId)}
+                          disabled={isDeleting}
+                          className="text-red-600 hover:text-red-800 text-xs font-semibold disabled:opacity-50"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {editingRecord && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <LeaveForm
+              initialEmployee={{ email: employeeEmail }}
+              initialData={editingRecord}
+              onSuccess={() => {
+                setEditingRecord(null);
+                setRefreshSeq((s) => s + 1);
+              }}
+              onCancel={() => setEditingRecord(null)}
+            />
+          </div>
         </div>
       )}
     </div>

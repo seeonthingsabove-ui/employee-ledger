@@ -156,6 +156,33 @@ function doPost(e) {
         ContentService.createTextOutput("OK").setMimeType(ContentService.MimeType.TEXT)
       );
     }
+    // --- EDIT LEAVE REQUEST ---
+    if (payloadType === "edit_request") {
+      var requestId = String(data.requestId || "").trim();
+      var rowIndex = findLogRowByRequestId_(logSheet, requestId);
+      if (rowIndex !== -1) {
+        var dates = data.startDate + " - " + data.endDate;
+        logSheet.getRange(rowIndex, 8).setValue(dates); // Dates
+        logSheet.getRange(rowIndex, 9).setValue(data.reason);
+        logSheet.getRange(rowIndex, 12).setValue(data.permissionType || "");
+        logSheet.getRange(rowIndex, 13).setValue(data.leaveType || "");
+        logSheet.getRange(rowIndex, 14).setValue(data.requestedInTime || "");
+        logSheet.getRange(rowIndex, 15).setValue(data.requestedOutTime || "");
+        logSheet.getRange(rowIndex, 16).setValue(data.alternateStaff || "");
+        return withCors_(ContentService.createTextOutput("OK").setMimeType(ContentService.MimeType.TEXT));
+      }
+      return withCors_(ContentService.createTextOutput("Error: Request ID not found").setMimeType(ContentService.MimeType.TEXT));
+    }
+    // --- DELETE LEAVE REQUEST ---
+    if (payloadType === "delete_request") {
+      var requestId = String(data.requestId || "").trim();
+      var rowIndex = findLogRowByRequestId_(logSheet, requestId);
+      if (rowIndex !== -1) {
+        logSheet.getRange(rowIndex, 4).setValue("DELETED");
+        return withCors_(ContentService.createTextOutput("OK").setMimeType(ContentService.MimeType.TEXT));
+      }
+      return withCors_(ContentService.createTextOutput("Error: Request ID not found").setMimeType(ContentService.MimeType.TEXT));
+    }
     // --- NEW LEAVE REQUEST ---
     var requestId = newRequestId_();
     var dates = data.startDate + " - " + data.endDate;

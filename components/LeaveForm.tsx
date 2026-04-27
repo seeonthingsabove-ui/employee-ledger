@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { LeaveRequest, LeaveStatus } from '../types';
 import { saveRequest } from '../services/storageService';
-import { appendLogEntry, fetchLookupOptions, fetchEmployeeDirectory } from '../services/sheetService';
+import { appendLogEntry, updateLogEntry, fetchLookupOptions, fetchEmployeeDirectory, LogSheetRecord } from '../services/sheetService';
 import { EmployeeRecord } from '../types';
 
 const PERMISSION_ONLY_LEAVE_TYPES = ['FN Permission', 'AN Permission', 'In Between Permission'];
@@ -9,20 +9,22 @@ const normalize = (v: string) => v.trim().toLowerCase();
 
 const LeaveForm: React.FC<{
   onSuccess: () => void;
+  onCancel?: () => void;
   initialEmployee?: { name?: string; email?: string; employeeId?: string };
-}> = ({ onSuccess, initialEmployee }) => {
+  initialData?: LogSheetRecord;
+}> = ({ onSuccess, onCancel, initialEmployee, initialData }) => {
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    empId: '',
-    permissionType: '',
-    leaveType: '',
-    requestedInTime: '',
-    requestedOutTime: '',
-    startDate: '',
-    endDate: '',
-    alternateStaff: '',
-    reason: '',
+    name: initialData?.employeeName || '',
+    email: initialData?.employeeEmail || '',
+    empId: initialData?.employeeId || '',
+    permissionType: initialData?.permissionType || '',
+    leaveType: initialData?.leaveType || '',
+    requestedInTime: initialData?.requestedInTime || '',
+    requestedOutTime: initialData?.requestedOutTime || '',
+    startDate: initialData?.dates?.split(' - ')[0] || '',
+    endDate: initialData?.dates?.split(' - ')[1] || '',
+    alternateStaff: initialData?.alternateStaff || '',
+    reason: initialData?.reason || '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [permissionTypeOptions, setPermissionTypeOptions] = useState<string[]>([]);
@@ -59,7 +61,9 @@ const LeaveForm: React.FC<{
 
         setPermissionTypeOptions(permissionTypes);
         setLeaveTypeOptions(leaveTypes);
-        setEmployees(employeeList.filter(e => e.role === 'employee')); // Filter for employees only
+
+        const currentUserEmail = (initialEmployee?.email || initialData?.employeeEmail || '').toLowerCase();
+        setEmployees(employeeList.filter(e => e.role === 'employee' && e.email !== currentUserEmail)); // Filter for employees only and exclude self
         setLookupError(null);
       } catch (e) {
         console.error(e);
@@ -131,12 +135,12 @@ const LeaveForm: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.permissionType, formData.leaveType]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     const newRequest: LeaveRequest = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: initialData?.requestId || Math.random().toString(36).substr(2, 9),
       employeeName: formData.name,
       employeeEmail: formData.email,
       employeeId: formData.empId,
@@ -153,25 +157,48 @@ const LeaveForm: React.FC<{
       timestamp: Date.now(),
     };
 
-    // Simulate network delay
-    setTimeout(() => {
+    try {
       saveRequest(newRequest);
-      appendLogEntry({
-        type: 'request',
-        status: LeaveStatus.PENDING,
-        employeeName: newRequest.employeeName,
-        employeeEmail: newRequest.employeeEmail,
-        employeeId: newRequest.employeeId,
-        permissionType: newRequest.permissionType,
-        leaveType: newRequest.leaveType,
-        requestedInTime: newRequest.requestedInTime,
-        requestedOutTime: newRequest.requestedOutTime,
-        startDate: newRequest.startDate,
-        endDate: newRequest.endDate,
-        alternateStaff: newRequest.alternateStaff,
-        reason: newRequest.reason,
-        timestamp: newRequest.timestamp,
-      });
+      if (initialData) {
+        await updateLogEntry({
+          requestId: newRequest.id,
+          type: 'request',
+          status: LeaveStatus.PENDING,
+          employeeName: newRequest.employeeName,
+          employeeEmail: newRequest.employeeEmail,
+          employeeId: newRequest.employeeId,
+          permissionType: newRequest.permissionType,
+          leaveType: newRequest.leaveType,
+          requestedInTime: newRequest.requestedInTime,
+          requestedOutTime: newRequest.requestedOutTime,
+          startDate: newRequest.startDate,
+          endDate: newRequest.endDate,
+          alternateStaff: newRequest.alternateStaff,
+          reason: newRequest.reason,
+          timestamp: newRequest.timestamp,
+        });
+      } else {
+        await appendLogEntry({
+          type: 'request',
+          status: LeaveStatus.PENDING,
+          employeeName: newRequest.employeeName,
+          employeeEmail: newRequest.employeeEmail,
+          employeeId: newRequest.employeeId,
+          permissionType: newRequest.permissionType,
+          leaveType: newRequest.leaveType,
+          requestedInTime: newRequest.requestedInTime,
+          requestedOutTime: newRequest.requestedOutTime,
+          startDate: newRequest.startDate,
+          endDate: newRequest.endDate,
+          alternateStaff: newRequest.alternateStaff,
+          reason: newRequest.reason,
+          timestamp: newRequest.timestamp,
+        });
+      }
+    } catch(err) {
+      console.error(err);
+      alert("Failed to submit request to Google Sheets.");
+    } finally {
       setIsSubmitting(false);
       setFormData({
         name: '',
@@ -185,14 +212,21 @@ const LeaveForm: React.FC<{
         endDate: '',
         reason: '',
       });
-      alert("Request Submitted!");
+      alert(initialData ? "Request Updated!" : "Request Submitted!");
       onSuccess();
-    }, 1000);
+    }
   };
 
   return (
     <div className="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-lg border border-gray-100">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6">New Leave Request</h2>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-800">{initialData ? 'Edit Leave Request' : 'New Leave Request'}</h2>
+        {onCancel && (
+          <button onClick={onCancel} className="text-gray-500 hover:text-gray-800">
+            Cancel
+          </button>
+        )}
+      </div>
       {lookupError && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {lookupError}
@@ -378,6 +412,7 @@ const LeaveForm: React.FC<{
           <label className="block text-sm font-medium text-gray-700 mb-1">Alternate Staff</label>
           <select
             name="alternateStaff"
+            required
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition bg-white"
             value={formData.alternateStaff}
             onChange={handleSelectChange}

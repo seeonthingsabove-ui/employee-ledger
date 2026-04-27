@@ -217,6 +217,12 @@ const ManagerDashboard: React.FC<{ focusRequestId?: string }> = ({
                     </p>
                     <p className="font-medium">{req.requestedOutTime || "-"}</p>
                   </div>
+                  <div className="bg-gray-50 p-3 rounded-md border border-gray-100 md:col-span-2">
+                    <p className="text-xs text-gray-400 uppercase mb-1">
+                      Alternate Staff
+                    </p>
+                    <p className="font-medium">{req.alternateStaff || "-"}</p>
+                  </div>
                 </div>
 
                 <div className="bg-gray-50 p-4 rounded-md mb-4 text-sm text-gray-700 border border-gray-100">

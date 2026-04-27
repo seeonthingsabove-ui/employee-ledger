@@ -8,7 +8,7 @@ const getEnv = () => ({
     sheetId: process.env.SHEET_ID,
     apiKey: process.env.SHEETS_API_KEY,
     employeeRange: process.env.SHEET_EMPLOYEE_RANGE || 'employeedetails!A:E', // Headers: S_NO, EMP_CODE, EMP_NAME, ROLE, EMAIL_ID
-    logRange: process.env.SHEET_LOG_RANGE || 'Logs!A:O', // Logs sheet (A:O) as written by Apps Script
+    logRange: process.env.SHEET_LOG_RANGE || 'Logs!A:P', // Logs sheet (A:P) as written by Apps Script
     logWebhook: process.env.SHEET_LOG_WEBHOOK, // Apps Script / API endpoint to append rows securely
     lookupRange: (process.env.SHEET_LOOKUP_RANGE as string | undefined) || 'LookUp!A:B', // Col A: Permission Type, Col B: Leave Type
 });
@@ -119,6 +119,34 @@ export const appendLogEntry = async (entry: LogEntry): Promise<boolean> => {
         console.error('Network or CORS error during log submission. Check deployed script permissions and URL.', err);
         return false;
     }
+};
+
+export const updateLogEntry = async (entry: LogEntry & { requestId: string }): Promise<boolean> => {
+    const { logWebhook } = getEnv();
+    if (!logWebhook) return false;
+    try {
+        await fetch(logWebhook, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ ...entry, type: 'edit_request' }),
+        });
+        return true;
+    } catch { return false; }
+};
+
+export const deleteLogEntry = async (requestId: string): Promise<boolean> => {
+    const { logWebhook } = getEnv();
+    if (!logWebhook) return false;
+    try {
+        await fetch(logWebhook, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ type: 'delete_request', requestId }),
+        });
+        return true;
+    } catch { return false; }
 };
 
 export const clearRoleCache = () => {
@@ -263,10 +291,10 @@ export const fetchEmployeeLogHistory = async (employeeEmail: string): Promise<Lo
         // Try configured range first; then common fallbacks (case + width).
         const rangesToTry = [
             logRange,
+            'Logs!A:P',
+            'logs!A:P',
             'Logs!A:O',
             'logs!A:O',
-            'Logs!A:K',
-            'logs!A:K',
         ];
 
         let values: string[][] | null = null;
@@ -304,10 +332,10 @@ export const fetchLogRecords = async (): Promise<LogSheetRecord[]> => {
     try {
         const rangesToTry = [
             logRange,
+            'Logs!A:P',
+            'logs!A:P',
             'Logs!A:O',
             'logs!A:O',
-            'Logs!A:K',
-            'logs!A:K',
         ];
 
         let values: string[][] | null = null;
